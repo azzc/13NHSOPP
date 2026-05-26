@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "last_updated": "2026-05-26",
+  "app_min_version": "0.1.0",
+  "data": {
+    "error_codes": {
+      "version": "1.0.0",
+      "url": "https://raw.githubusercontent.com/azzc/13NHSOPP/main/error-codes.json",
+      "sha256": "6613dc43f2f00e5404ec9cdde3498e013ff117e40df8f5fcf2fe3ae33fccae44"
+    }
+  }
+}

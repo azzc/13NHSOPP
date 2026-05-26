@@ -1,0 +1,62 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2026-05-26",
+  "items": [
+    {
+      "code": "L104",
+      "message": "รหัสหัตถการที่ระบุไม่มีในฐานข้อมูลของ สปสช.",
+      "solution": "ตรวจสอบรหัส ICD-9-CM ใน ovstist หรือ procedure_opd ให้ตรงกับ master ของ สปสช.",
+      "allow_claim": "N",
+      "category": "data"
+    },
+    {
+      "code": "L108",
+      "message": "STDCODE ไม่ตรงกับหมวด BILLGRCS+CODESYS",
+      "solution": "ตรวจสอบ stdcode ใน opitemrece ว่าตรงกับ BILLGRCS+CODESYS ที่ระบุไหม (ดู service_catalog)",
+      "allow_claim": "N",
+      "category": "data"
+    },
+    {
+      "code": "L110",
+      "message": "CODESYS ไม่ถูกต้อง — หมวดค่าใช้จ่ายไม่รองรับรหัสที่ใช้",
+      "solution": "เปลี่ยน CODESYS ให้ตรงกับ BILLGRCS (เช่น 12 ต้องใช้ 005 NHSO)",
+      "allow_claim": "N",
+      "category": "data"
+    },
+    {
+      "code": "L203",
+      "message": "STDCODE ไม่สามารถ Convert GPU ได้",
+      "solution": "อัปเดต drugitems.tpu_code_list ให้ตรงกับ GPU master หรือ re-import DrugCatalog",
+      "allow_claim": "Y",
+      "category": "data"
+    },
+    {
+      "code": "L205",
+      "message": "ผ่านขั้นตอนการหาข้อมูลยา รพ. — info เท่านั้น",
+      "solution": "ไม่ใช่ error — เป็นข้อความ informational",
+      "allow_claim": "Y",
+      "category": "info"
+    },
+    {
+      "code": "R118",
+      "message": "CHARGEAMT ต้องมีค่าตรงกับ QTY × UNITPRICE",
+      "solution": "แก้ opitemrece.sum_price ให้ = qty × unitprice — หรือปรับ qty/unitprice ให้คูณกันได้ถูก",
+      "allow_claim": "Y",
+      "category": "validation"
+    },
+    {
+      "code": "SV001",
+      "message": "Duplicate Request Message",
+      "solution": "request-id ซ้ำ — ปกติ retry อัตโนมัติได้",
+      "allow_claim": "Y",
+      "category": "transport"
+    },
+    {
+      "code": "SV002",
+      "message": "Invalid Request Message",
+      "solution": "Body ของ request ไม่ถูก format — ตรวจสอบ JSON หรือ field ที่ส่ง",
+      "allow_claim": "N",
+      "category": "transport"
+    }
+  ]
+}
