@@ -45,15 +45,19 @@ if (!hcode || !/^\d{5}$/.test(hcode)) {
 }
 
 const plan     = args.plan || 'pro';
-const days     = parseInt(args.days || (plan === 'trial' ? '30' : '365'), 10);
+const days     = parseInt(args.days || ((plan === 'trial' || plan === 'free') ? '30' : '365'), 10);
 const machines = parseInt(args.machines || '3', 10);
 const name     = args.name;
 const province = args.province;
 
 // Plan presets
 const PLAN_FEATURES = {
+  // Free — ใช้ฟรี 30 วัน (1 key/hcode) — ดึง EP/PP + ยกเลิกโอน เท่านั้น
   free: {
-    validator_basic: true, online_updates: true,
+    validator_basic: true,
+    online_updates:  true,
+    fetch_ep_pp:     true,
+    transfer_cancel: true,
   },
   trial: {
     validator_basic: true, validator_full: true, reimburse_analyzer: true,
@@ -88,6 +92,23 @@ const licenseKey = genKey(prefix);
 const expiresAt = new Date(Date.now() + days * 86400 * 1000).toISOString();
 
 (async () => {
+  // 0. Enforce: 1 active "free" license per hcode (กัน admin ออกซ้ำ)
+  if (plan === 'free') {
+    const { data: existing, error: ee } = await supabase
+      .from('licenses')
+      .select('id, license_key, expires_at, status')
+      .eq('hcode', hcode).eq('plan', 'free').eq('status', 'active');
+    if (ee) { console.error('❌ check existing:', ee.message); process.exit(1); }
+    const stillValid = existing?.find(l => !l.expires_at || new Date(l.expires_at) > new Date());
+    if (stillValid) {
+      console.error('❌ hcode ' + hcode + ' มี free license ที่ยังใช้ได้อยู่:');
+      console.error('   key: ' + stillValid.license_key + ' (expires ' + stillValid.expires_at + ')');
+      console.error('   1 key ต่อ 1 hcode — หมดอายุก่อนค่อยขอใหม่ หรือใช้ --force');
+      if (!args.force) process.exit(1);
+      console.log('⚠️ --force — สร้างต่อทั้งที่มี active free key อยู่');
+    }
+  }
+
   // 1. Upsert hospital
   if (name || province) {
     const { error: he } = await supabase.from('hospitals').upsert({
