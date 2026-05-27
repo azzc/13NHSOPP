@@ -17,12 +17,20 @@ if (-not (Test-Path $keyFile)) {
     Write-Host "Get from: https://supabase.com/dashboard/project/fzlzmrwkueonabpwuhma/settings/api"
     Write-Host "(click Reveal under 'service_role secret')"
     Write-Host ""
-    $sk = Read-Host "Paste service_role key"
+    $sk = Read-Host "Paste service_role key (long JWT starts with eyJ...)"
+    $sk = $sk.Trim()
     if ([string]::IsNullOrWhiteSpace($sk)) {
         Write-Host "[X] Empty input" -ForegroundColor Red
         exit 1
     }
-    [System.IO.File]::WriteAllText($keyFile, $sk.Trim())
+    # Validate: must be JWT (3 parts split by dot, starts with eyJ)
+    if (-not ($sk.StartsWith('eyJ')) -or ($sk.Split('.').Count -ne 3) -or ($sk.Length -lt 100)) {
+        Write-Host "[X] Not a valid JWT" -ForegroundColor Red
+        Write-Host "    service_role key must look like: eyJhbGc...<long string>...xxx"
+        Write-Host "    Found: $($sk.Substring(0, [Math]::Min(40, $sk.Length)))..."
+        exit 1
+    }
+    [System.IO.File]::WriteAllText($keyFile, $sk)
     Write-Host "[OK] Saved to $keyFile" -ForegroundColor Green
     Write-Host ""
 }
