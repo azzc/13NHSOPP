@@ -1,0 +1,12 @@
+{
+  "name": "nhsosender13-license-tools",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "gen": "node gen_license.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  }
+}
