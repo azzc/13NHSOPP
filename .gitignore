@@ -1,0 +1,10 @@
+# Service role key (sensitive — never commit)
+.service-role-key
+**/.service-role-key
+
+# Node
+node_modules/
+package-lock.json
+
+# Claude sessions (PHI)
+.claude-sessions/*.jsonl
