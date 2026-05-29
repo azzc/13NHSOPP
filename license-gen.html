@@ -137,6 +137,49 @@
   <div id="licenseTable"><p style="color:#888;font-size:.85rem">กด "โหลด" เพื่อดูรายการ</p></div>
 </div>
 
+<!-- LINE Broadcast card -->
+<div class="card">
+  <h2>📢 LINE Broadcast</h2>
+  <div class="form-row">
+    <label>Admin Token:</label>
+    <input type="password" id="bcAdminToken" placeholder="ADMIN_TOKEN (ตั้งใน Edge Function env)" />
+  </div>
+  <div class="form-row">
+    <label>Audience:</label>
+    <select id="bcAudience" onchange="onBcAudienceChange()">
+      <option value="all">ทุกคน (all)</option>
+      <option value="hcode">เฉพาะ รพ. (hcode)</option>
+      <option value="plan">เฉพาะ Plan</option>
+      <option value="expired_in_days">License ใกล้หมดอายุ</option>
+    </select>
+  </div>
+  <div class="form-row" id="bcHcodeRow" style="display:none">
+    <label>HCODE:</label>
+    <input type="text" id="bcHcode" placeholder="05097" maxlength="10" style="max-width:120px" />
+  </div>
+  <div class="form-row" id="bcPlanRow" style="display:none">
+    <label>Plan:</label>
+    <select id="bcPlan"><option value="trial">Trial</option><option value="free">Free</option><option value="pro">Pro</option></select>
+  </div>
+  <div class="form-row" id="bcDaysRow" style="display:none">
+    <label>หมดอายุภายใน (วัน):</label>
+    <input type="number" id="bcDays" value="7" min="1" max="365" style="max-width:80px" />
+  </div>
+  <div class="form-row">
+    <label>Prefix:</label>
+    <input type="text" id="bcPrefix" value="📢 [ประกาศ] " />
+  </div>
+  <div class="form-row" style="align-items:flex-start">
+    <label>Message:</label>
+    <textarea id="bcMessage" rows="4" style="flex:1;padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:.875rem;font-family:inherit" placeholder="ระบบจะอัพเดทเวอร์ชั่นใหม่วันที่ ..."></textarea>
+  </div>
+  <div class="form-row" style="justify-content:flex-end;gap:8px">
+    <button class="btn btn-secondary" onclick="broadcast(true)">👁 Preview (Dry run)</button>
+    <button class="btn btn-primary" onclick="broadcast(false)">📤 ส่งจริง</button>
+  </div>
+  <div id="bcResult"></div>
+</div>
+
 <script>
 // ============================================================
 // State
@@ -433,6 +476,61 @@ async function revokeLicense(licKey) {
       alert('Revoke ไม่สำเร็จ: ' + JSON.stringify(data));
     }
   } catch(e) { alert('Error: ' + e.message); }
+}
+
+// ============================================================
+// LINE Broadcast
+// ============================================================
+function onBcAudienceChange() {
+  const a = document.getElementById('bcAudience').value;
+  document.getElementById('bcHcodeRow').style.display = (a === 'hcode') ? 'flex' : 'none';
+  document.getElementById('bcPlanRow').style.display  = (a === 'plan')  ? 'flex' : 'none';
+  document.getElementById('bcDaysRow').style.display  = (a === 'expired_in_days') ? 'flex' : 'none';
+}
+
+async function broadcast(dryRun) {
+  const adminToken = document.getElementById('bcAdminToken').value.trim();
+  const audience   = document.getElementById('bcAudience').value;
+  const prefix     = document.getElementById('bcPrefix').value;
+  const message    = document.getElementById('bcMessage').value.trim();
+  const resultEl   = document.getElementById('bcResult');
+
+  if (!adminToken) { alert('กรุณากรอก Admin Token'); return; }
+  if (!message)    { alert('กรุณากรอก Message'); return; }
+
+  const filter = {};
+  if (audience === 'hcode') filter.hcode = document.getElementById('bcHcode').value.trim();
+  if (audience === 'plan')  filter.plan  = document.getElementById('bcPlan').value;
+  if (audience === 'expired_in_days') filter.days = parseInt(document.getElementById('bcDays').value, 10);
+
+  resultEl.innerHTML = '<div style="margin-top:10px;color:#666;font-size:.85rem">⏳ กำลัง ' + (dryRun ? 'preview' : 'ส่ง') + '...</div>';
+
+  try {
+    const url = getUrl() + '/functions/v1/line-broadcast';
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-token': adminToken },
+      body: JSON.stringify({ audience, filter, message, prefix, dry_run: dryRun }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      if (dryRun) {
+        const list = (data.users ?? []).map(u => '<li>' + (u.hcode||'-') + ' — ' + (u.name||'-') + '</li>').join('');
+        resultEl.innerHTML = `<div style="margin-top:10px;background:#eef9ee;border:1px solid #c0deb1;padding:10px;border-radius:6px">
+          <b>Preview:</b> จะส่งหา ${data.total} คน<br>
+          <ul style="margin-top:6px;font-size:.85rem;max-height:200px;overflow:auto">${list}</ul>
+        </div>`;
+      } else {
+        resultEl.innerHTML = `<div style="margin-top:10px;background:#eef9ee;border:1px solid #c0deb1;padding:10px;border-radius:6px">
+          ✅ ส่งสำเร็จ <b>${data.sent}</b> / ทั้งหมด <b>${data.total}</b> (ล้มเหลว ${data.failed})
+        </div>`;
+      }
+    } else {
+      resultEl.innerHTML = `<div style="margin-top:10px;color:#991b1b">❌ ${data.error || res.status}</div>`;
+    }
+  } catch(e) {
+    resultEl.innerHTML = `<div style="margin-top:10px;color:#991b1b">❌ ${e.message}</div>`;
+  }
 }
 </script>
 </body>
