@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>NhsoSender13 — Admin Tools</title>
+<style>
+  body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f0f2f5; padding: 40px; }
+  h1 { color: #1a1a2e; }
+  .card { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.08); max-width: 600px; margin: 20px auto; }
+  a { color: #4f46e5; text-decoration: none; font-weight: 600; }
+  a:hover { text-decoration: underline; }
+  .muted { color: #666; font-size: 0.9rem; }
+</style>
+</head>
+<body>
+  <h1>NhsoSender13 — Admin Tools</h1>
+  <div class="card">
+    <h2>🔑 License Generator</h2>
+    <p><a href="license-gen.html">เปิด License Generator</a></p>
+    <p class="muted">ออก License Key ใหม่ + จัดการลูกค้า (ต้องมี Supabase service_role key)</p>
+  </div>
+  <div class="card">
+    <h2>📦 Data</h2>
+    <p><a href="manifest.json">manifest.json</a> · <a href="error-codes.json">error-codes.json</a></p>
+    <p class="muted">App fetches these at startup for online updates.</p>
+  </div>
+</body>
+</html>
