@@ -180,7 +180,155 @@
   <div id="bcResult"></div>
 </div>
 
+<!-- Support Admin Panel card -->
+<div class="card">
+  <h2>🛟 Support — รับเรื่องจากผู้ใช้</h2>
+  <div class="form-row">
+    <label>Admin Token:</label>
+    <input type="password" id="spAdminToken" placeholder="ใช้ตัวเดียวกับ Broadcast" />
+  </div>
+  <div class="form-row">
+    <label>Status filter:</label>
+    <select id="spStatus" onchange="loadIssues()">
+      <option value="open">open</option>
+      <option value="pending_review" selected>pending_review</option>
+      <option value="resolved">resolved</option>
+      <option value="rejected">rejected</option>
+      <option value="all">ทั้งหมด</option>
+    </select>
+    <button class="btn btn-secondary btn-sm" onclick="loadIssues()">🔄 โหลด</button>
+  </div>
+  <div id="spList" style="margin-top:10px"></div>
+  <div id="spDetail" style="margin-top:14px"></div>
+</div>
+
 <script>
+// ============================================================
+// Support Admin Panel
+// ============================================================
+async function spCall(body) {
+  const token = document.getElementById('spAdminToken').value.trim();
+  if (!token) { alert('กรุณากรอก Admin Token'); throw new Error('no token'); }
+  const url = getUrl() + '/functions/v1/support-admin';
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
+    body: JSON.stringify(body),
+  });
+  const j = await res.json();
+  if (!res.ok) throw new Error(j.error || 'request failed');
+  return j;
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function loadIssues() {
+  const status = document.getElementById('spStatus').value;
+  const listEl = document.getElementById('spList');
+  listEl.innerHTML = '<div class="alert alert-info">⏳ กำลังโหลด...</div>';
+  try {
+    const j = await spCall({ action: 'list', status, limit: 50 });
+    if (!j.issues || j.issues.length === 0) {
+      listEl.innerHTML = '<div class="alert alert-info">ไม่มีรายการ</div>';
+      return;
+    }
+    let html = '<table><thead><tr><th>เวลา</th><th>HCODE</th><th>ข้อความ</th><th>Status</th><th></th></tr></thead><tbody>';
+    for (const it of j.issues) {
+      const t = new Date(it.created_at).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' });
+      const msg = (it.user_message || '').substring(0, 100);
+      html += `<tr>
+        <td class="mono" style="white-space:nowrap">${escapeHtml(t)}</td>
+        <td class="mono">${escapeHtml(it.hcode ?? '-')}</td>
+        <td>${escapeHtml(msg)}</td>
+        <td><span class="badge badge-trial">${escapeHtml(it.status)}</span></td>
+        <td><button class="btn btn-secondary btn-sm" onclick="viewIssue('${it.id}')">เปิด</button></td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+    listEl.innerHTML = html;
+  } catch (e) {
+    listEl.innerHTML = `<div class="alert alert-error">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function viewIssue(id) {
+  const detail = document.getElementById('spDetail');
+  detail.innerHTML = '<div class="alert alert-info">⏳ กำลังโหลด...</div>';
+  try {
+    const j = await spCall({ action: 'get', id });
+    const it = j.issue;
+    const ctx = it.context ? `<pre style="background:#f8f9fa;padding:10px;border-radius:6px;font-size:.75rem;overflow:auto">${escapeHtml(JSON.stringify(it.context, null, 2))}</pre>` : '';
+    const ai = it.ai_analysis
+      ? `<div style="background:#dbeafe;border-radius:6px;padding:10px;margin-top:8px">
+           <b>🤖 AI Analysis:</b><br>${escapeHtml(it.ai_analysis)}
+           ${it.ai_suggested_fix ? `<br><br><b>💡 Suggested Fix:</b><br>${escapeHtml(it.ai_suggested_fix)}` : ''}
+         </div>`
+      : '<div class="alert alert-info">ยังไม่มีผล AI วิเคราะห์</div>';
+
+    const msgs = (j.messages ?? []).slice(0, 10).reverse().map(m => {
+      const t = new Date(m.created_at).toLocaleTimeString('th-TH');
+      const ic = m.direction === 'in' ? '👤' : '🤖';
+      return `<div style="font-size:.8rem;margin:4px 0"><span style="color:#888">${escapeHtml(t)}</span> ${ic} ${escapeHtml(m.message_text ?? '')}</div>`;
+    }).join('');
+
+    detail.innerHTML = `
+      <div class="card" style="background:#fafafa;margin:0">
+        <h2>📌 Issue ${escapeHtml(it.id.substring(0, 8))} · HCODE ${escapeHtml(it.hcode ?? '-')}</h2>
+        <div style="margin-bottom:8px"><b>ข้อความผู้ใช้:</b><br>${escapeHtml(it.user_message)}</div>
+        ${ctx}
+        ${ai}
+        ${msgs ? `<div style="margin-top:10px"><b>📜 ประวัติแชท 10 ล่าสุด:</b>${msgs}</div>` : ''}
+        <div class="form-row" style="align-items:flex-start;margin-top:14px">
+          <label>ตอบกลับ:</label>
+          <textarea id="spReplyText" rows="4" style="flex:1;padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:.875rem;font-family:inherit" placeholder="พิมพ์ข้อความตอบกลับผู้ใช้...">${escapeHtml(it.ai_suggested_fix ?? '')}</textarea>
+        </div>
+        <div class="form-row" style="justify-content:flex-end;gap:8px">
+          <label style="display:flex;align-items:center;gap:6px;width:auto;font-size:.85rem">
+            <input type="checkbox" id="spMarkResolved" checked /> ปิดเรื่อง (resolved)
+          </label>
+          <button class="btn btn-secondary btn-sm" onclick="setStatus('${it.id}','rejected')">ปฏิเสธ</button>
+          <button class="btn btn-primary" onclick="sendReply('${it.id}')">📤 ส่งตอบกลับ</button>
+        </div>
+        <div id="spReplyResult"></div>
+      </div>`;
+  } catch (e) {
+    detail.innerHTML = `<div class="alert alert-error">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function sendReply(id) {
+  const reply = document.getElementById('spReplyText').value.trim();
+  const mark  = document.getElementById('spMarkResolved').checked;
+  const result = document.getElementById('spReplyResult');
+  if (!reply) { alert('กรุณาพิมพ์ข้อความ'); return; }
+  result.innerHTML = '<div class="alert alert-info">⏳ กำลังส่ง...</div>';
+  try {
+    const j = await spCall({ action: 'reply', id, reply, mark_resolved: mark });
+    if (j.sent) {
+      result.innerHTML = '<div class="alert alert-success">✅ ส่งตอบกลับสำเร็จ</div>';
+      setTimeout(loadIssues, 800);
+    } else {
+      result.innerHTML = `<div class="alert alert-error">❌ ส่งไม่สำเร็จ: ${escapeHtml(j.error ?? '')}</div>`;
+    }
+  } catch (e) {
+    result.innerHTML = `<div class="alert alert-error">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function setStatus(id, status) {
+  if (!confirm(`เปลี่ยนสถานะเป็น ${status}?`)) return;
+  try {
+    await spCall({ action: 'set_status', id, status });
+    document.getElementById('spDetail').innerHTML = '';
+    loadIssues();
+  } catch (e) {
+    alert('ผิดพลาด: ' + e.message);
+  }
+}
+
+// ============================================================
 // ============================================================
 // State
 // ============================================================
