@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<title>NhsoSender13 — ออก License (มือถือ)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: -apple-system, 'Segoe UI', Tahoma, sans-serif; background: #f0f2f5; color: #1a1a2e; padding: 16px; max-width: 560px; margin: 0 auto; }
+  h1 { font-size: 1.15rem; margin-bottom: 2px; }
+  .subtitle { color: #666; font-size: .78rem; margin-bottom: 16px; }
+  .card { background: #fff; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.07); padding: 18px; margin-bottom: 14px; }
+  label { display: block; font-size: .82rem; color: #555; margin: 12px 0 5px; font-weight: 600; }
+  label:first-child { margin-top: 0; }
+  input, select { width: 100%; padding: 12px 12px; border: 1px solid #d1d5db; border-radius: 9px; font-size: 1rem; background: #fff; }
+  input:focus, select:focus { outline: none; border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,.15); }
+  .row { display: flex; gap: 10px; }
+  .row > div { flex: 1; }
+  .hint { font-size: .72rem; color: #999; margin-top: 4px; }
+  .btn { width: 100%; padding: 14px; border: none; border-radius: 10px; font-size: 1.02rem; font-weight: 700; cursor: pointer; margin-top: 18px; }
+  .btn-primary { background: #4f46e5; color: #fff; }
+  .btn-primary:active { background: #3730a3; }
+  .btn-primary:disabled { background: #a5b4fc; }
+  .alert { padding: 14px; border-radius: 10px; font-size: .9rem; margin-top: 14px; line-height: 1.5; word-break: break-word; }
+  .alert-success { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+  .alert-error   { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+  .alert-info    { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+  .keybox { font-family: 'Consolas', monospace; font-size: 1.35rem; letter-spacing: .06em; background: #fff; border: 2px dashed #16a34a; border-radius: 10px; padding: 14px; text-align: center; margin: 10px 0; user-select: all; word-break: break-all; }
+  .copybtn { background: #16a34a; color: #fff; border: none; border-radius: 8px; padding: 10px 16px; font-size: .9rem; font-weight: 600; cursor: pointer; width: 100%; }
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .toggle { font-size: .78rem; color: #4f46e5; cursor: pointer; margin-top: 10px; display: inline-block; }
+  .adv { display: none; }
+  .adv.show { display: block; }
+  details summary { cursor: pointer; font-size: .85rem; color: #4f46e5; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<h1>🔑 ออก License Key</h1>
+<p class="subtitle">service_role อยู่ฝั่ง server — มือถือกรอกแค่ Admin Token + HCODE</p>
+
+<div class="card">
+  <details id="cfgDetails">
+    <summary>⚙️ ตั้งค่า (ครั้งแรกครั้งเดียว)</summary>
+    <label>Function URL</label>
+    <input type="text" id="fnUrl" placeholder="https://fzlzmrwkueonabpwuhma.supabase.co/functions/v1/gen-license" />
+    <label>Admin Token</label>
+    <input type="password" id="adminToken" placeholder="ตั้งเป็น secret ใน Edge Function" autocomplete="off" />
+    <div class="hint">บันทึกในเครื่องนี้เท่านั้น (localStorage) — ไม่ส่งไปไหนนอกจาก Edge Function</div>
+    <button class="btn btn-primary" style="margin-top:12px" onclick="saveCfg()">💾 บันทึกค่าตั้ง</button>
+  </details>
+</div>
+
+<div class="card">
+  <label>HCODE (รหัสหน่วยบริการ 5 หลัก) *</label>
+  <input type="tel" id="hcode" inputmode="numeric" maxlength="5" placeholder="05097" />
+
+  <label>ชื่อ รพ.สต. (ถ้าเว้นว่างจะใช้ hcode)</label>
+  <input type="text" id="hospName" placeholder="รพ.สต.บ้านดงมัน" />
+
+  <div class="row">
+    <div>
+      <label>Plan</label>
+      <select id="plan">
+        <option value="free">Free</option>
+        <option value="trial">Trial</option>
+        <option value="pro">Pro</option>
+      </select>
+    </div>
+    <div>
+      <label>หมดอายุ (วัน)</label>
+      <input type="number" id="days" value="30" min="0" max="3650" inputmode="numeric" />
+    </div>
+  </div>
+  <div class="hint">0 = ไม่หมดอายุ · Free ปกติ 30 วัน, Pro 365 วัน</div>
+
+  <span class="toggle" onclick="document.getElementById('adv').classList.toggle('show')">▸ ตัวเลือกเพิ่มเติม</span>
+  <div class="adv" id="adv">
+    <div class="row">
+      <div>
+        <label>จำนวนเครื่อง</label>
+        <input type="number" id="machines" value="3" min="1" max="99" inputmode="numeric" />
+      </div>
+      <div>
+        <label>บังคับออกซ้ำ (free)</label>
+        <select id="force"><option value="false">ไม่</option><option value="true">ใช่</option></select>
+      </div>
+    </div>
+    <label>Custom key (เว้นว่าง = สุ่ม)</label>
+    <input type="text" id="customKey" placeholder="ปล่อยว่าง" style="font-family:monospace" />
+  </div>
+
+  <button class="btn btn-primary" id="btnGen" onclick="generate()">✨ สร้าง License</button>
+  <div id="result"></div>
+</div>
+
+<script>
+const LS = 'nhso_genmobile_cfg';
+
+function loadCfg() {
+  const cfg = JSON.parse(localStorage.getItem(LS) || '{}');
+  document.getElementById('fnUrl').value = cfg.url
+    || 'https://fzlzmrwkueonabpwuhma.supabase.co/functions/v1/gen-license';
+  if (cfg.token) document.getElementById('adminToken').value = cfg.token;
+  // เปิดกล่องตั้งค่าให้อัตโนมัติถ้ายังไม่มี token
+  if (!cfg.token) document.getElementById('cfgDetails').open = true;
+}
+function saveCfg() {
+  const url = document.getElementById('fnUrl').value.trim();
+  const token = document.getElementById('adminToken').value.trim();
+  localStorage.setItem(LS, JSON.stringify({ url, token }));
+  document.getElementById('cfgDetails').open = false;
+  flash('บันทึกค่าตั้งแล้ว', 'success');
+}
+function flash(msg, kind) {
+  document.getElementById('result').innerHTML =
+    `<div class="alert alert-${kind}">${msg}</div>`;
+}
+function planDefaultDays() {
+  const p = document.getElementById('plan').value;
+  document.getElementById('days').value = (p === 'pro') ? 365 : 30;
+}
+document.getElementById('plan').addEventListener('change', planDefaultDays);
+
+async function generate() {
+  const url   = document.getElementById('fnUrl').value.trim();
+  const token = document.getElementById('adminToken').value.trim();
+  const hcode = document.getElementById('hcode').value.trim();
+
+  if (!url || !token) { document.getElementById('cfgDetails').open = true; flash('กรุณาตั้งค่า Function URL + Admin Token ก่อน', 'error'); return; }
+  if (!/^\d{5}$/.test(hcode)) { flash('HCODE ต้องเป็นเลข 5 หลัก', 'error'); return; }
+
+  const payload = {
+    hcode,
+    name:       document.getElementById('hospName').value.trim() || undefined,
+    plan:       document.getElementById('plan').value,
+    days:       parseInt(document.getElementById('days').value || '0', 10),
+    machines:   parseInt(document.getElementById('machines').value || '3', 10),
+    force:      document.getElementById('force').value === 'true',
+    custom_key: document.getElementById('customKey').value.trim() || undefined,
+  };
+
+  const btn = document.getElementById('btnGen');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>กำลังสร้าง...';
+  document.getElementById('result').innerHTML = '';
+
+  // เผื่อ token เปลี่ยน → บันทึกไว้ให้
+  localStorage.setItem(LS, JSON.stringify({ url, token }));
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+
+    if (res.ok && data.ok) {
+      const exp = data.expires_at
+        ? new Date(data.expires_at).toLocaleDateString('th-TH', { year:'numeric', month:'short', day:'numeric' })
+        : 'ไม่หมดอายุ';
+      document.getElementById('result').innerHTML = `
+        <div class="alert alert-success">
+          <b>✅ สร้าง License สำเร็จ</b><br>
+          🏥 HCODE ${data.hcode} · 📦 ${data.plan} · 📅 ${exp}
+        </div>
+        <div class="keybox" id="keybox">${data.license_key}</div>
+        <button class="copybtn" onclick="copyKey('${data.license_key}')">📋 คัดลอก Key</button>`;
+    } else if (res.status === 409 && data.existing_key) {
+      document.getElementById('result').innerHTML = `
+        <div class="alert alert-error">
+          ⚠️ ${data.error}<br>
+          key เดิม: <b>${data.existing_key}</b><br>
+          <span style="font-size:.8rem">${data.hint || ''} (เปิด "ตัวเลือกเพิ่มเติม" → บังคับออกซ้ำ = ใช่)</span>
+        </div>`;
+    } else {
+      flash('❌ ' + (data.error || ('HTTP ' + res.status)) + (data.detail ? '<br><span style="font-size:.78rem">' + data.detail + '</span>' : ''), 'error');
+    }
+  } catch (e) {
+    flash('❌ เชื่อมต่อไม่ได้: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '✨ สร้าง License';
+  }
+}
+
+function copyKey(k) {
+  navigator.clipboard.writeText(k).then(() => {
+    const box = document.getElementById('keybox');
+    if (box) { box.style.background = '#d1fae5'; setTimeout(() => box.style.background = '#fff', 700); }
+  });
+}
+
+loadCfg();
+</script>
+</body>
+</html>
