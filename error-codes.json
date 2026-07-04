@@ -1,6 +1,6 @@
 {
-  "version": "1.0.0",
-  "last_updated": "2026-05-26",
+  "version": "1.1.0",
+  "last_updated": "2026-07-04",
   "items": [
     {
       "code": "L104",
@@ -43,6 +43,13 @@
       "solution": "แก้ opitemrece.sum_price ให้ = qty × unitprice — หรือปรับ qty/unitprice ให้คูณกันได้ถูก",
       "allow_claim": "Y",
       "category": "validation"
+    },
+    {
+      "code": "OP001",
+      "message": "สิทธิ์/บริการไม่เข้าเงื่อนไข — hcode นี้ยังไม่ได้ขึ้นทะเบียนรองรับการเคลมสิทธิประเภทนี้",
+      "solution": "ไม่ใช่ปัญหาระดับรายการ (CHAD) — ตรวจสอบว่าหน่วยบริการขึ้นทะเบียนรองรับสิทธิประเภทนี้หรือยัง หรือส่งเบิกผ่านช่องทางอื่นแทน (เช่น จ่ายตรงกรมบัญชีกลาง)",
+      "allow_claim": "N",
+      "category": "auth"
     },
     {
       "code": "SV001",
