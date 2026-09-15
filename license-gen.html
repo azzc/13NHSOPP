@@ -202,6 +202,68 @@
   <div id="spDetail" style="margin-top:14px"></div>
 </div>
 
+<!-- DRUG-CAT License card -->
+<div class="card">
+  <h2>🐱 DRUG-CAT — จัดการ License (โปรแกรมสต๊อกยา รพ.สต.)</h2>
+
+  <div class="form-row">
+    <label>Admin Endpoint:</label>
+    <input type="text" id="dcEndpoint" value="https://fzlzmrwkueonabpwuhma.supabase.co/functions/v1/admin-license" />
+  </div>
+  <div class="form-row">
+    <label>Admin Token ของ DRUG-CAT:</label>
+    <input type="password" id="dcAdminToken" placeholder="แยกคนละตัวกับ NhsoSender13" autocomplete="off" />
+  </div>
+  <div class="hint" style="margin-left:170px">Token ถือไว้ในหน้านี้ชั่วคราวเท่านั้น — ไม่ถูกบันทึกลงเครื่อง ปิดหน้าเว็บแล้วหายทันที</div>
+
+  <div class="form-row">
+    <label>HCODE:</label>
+    <input type="text" id="dcHcode" placeholder="05097" maxlength="5" style="max-width:120px" />
+    <span style="font-size:.8rem;color:#888">รหัสหน่วยบริการ 5 หลัก (ใช้ร่วมทุกคำสั่งด้านล่าง)</span>
+  </div>
+
+  <h2 style="margin-top:20px">➕ ออก License ใหม่</h2>
+  <div class="form-row">
+    <label>อายุ (วัน):</label>
+    <input type="number" id="dcDays" value="365" min="1" max="3650" style="max-width:90px" />
+    <span style="font-size:.8rem;color:#888">นับจากวันที่ออก</span>
+  </div>
+  <div class="form-row">
+    <label>จำนวนเครื่องสูงสุด:</label>
+    <input type="number" id="dcMaxDevices" value="3" min="1" max="100" style="max-width:80px" />
+  </div>
+  <div class="form-row" style="align-items:flex-start">
+    <label style="padding-top:4px">สิทธิ์การใช้งาน:</label>
+    <div class="features-grid">
+      <label class="feat-item"><input type="checkbox" id="dcFeatDesktop" checked> โปรแกรมหลัก (Desktop)</label>
+      <label class="feat-item"><input type="checkbox" id="dcFeatTyphoon" checked> อ่านฉลากยาด้วย AI (Typhoon OCR)</label>
+    </div>
+  </div>
+  <div class="btn-row" style="margin-top:4px">
+    <button class="btn btn-primary" id="btnDcIssue" onclick="dcIssue()">✨ ออก License</button>
+    <span id="dcIssueStatus"></span>
+  </div>
+  <div id="dcIssueResult"></div>
+
+  <h2 style="margin-top:20px">🔎 ข้อมูล License และเครื่องที่เปิดใช้</h2>
+  <div class="btn-row" style="margin-top:0">
+    <button class="btn btn-secondary" onclick="dcLoadInfo()">🔄 ดึงข้อมูล</button>
+  </div>
+  <div id="dcInfo"></div>
+
+  <h2 style="margin-top:20px">🛠 จัดการ</h2>
+  <div class="form-row">
+    <label>ต่ออายุ (วัน):</label>
+    <input type="number" id="dcExtendDays" value="365" min="1" max="3650" style="max-width:90px" />
+    <button class="btn btn-secondary btn-sm" onclick="dcExtend()">📅 ต่ออายุ</button>
+  </div>
+  <div class="btn-row">
+    <button class="btn btn-danger" onclick="dcRevoke()">🗑 ยกเลิก License ทั้งหน่วยบริการ</button>
+  </div>
+  <div class="hint" style="margin-left:0">การยกเลิกทั้งหน่วยบริการเป็นถาวร — เครื่องที่เปิดใช้อยู่จะเข้าโหมดอ่านอย่างเดียวทันทีที่ตรวจสิทธิ์รอบถัดไป</div>
+  <div id="dcActionResult"></div>
+</div>
+
 <script>
 // ============================================================
 // Support Admin Panel
@@ -678,6 +740,179 @@ async function broadcast(dryRun) {
     }
   } catch(e) {
     resultEl.innerHTML = `<div style="margin-top:10px;color:#991b1b">❌ ${e.message}</div>`;
+  }
+}
+
+// ============================================================
+// DRUG-CAT License Admin
+// ============================================================
+const DC_ERR = {
+  UNAUTHORIZED: 'Admin Token ไม่ถูกต้อง',
+  NOT_FOUND: 'ไม่พบข้อมูลของหน่วยบริการนี้',
+  ALREADY_EXISTS: 'หน่วยบริการนี้มี License อยู่แล้ว (HCODE เดียวมีได้ 1 License)',
+  RATE_LIMITED: 'สั่งงานถี่เกินไป กรุณารอสักครู่แล้วลองใหม่',
+  INVALID_REQUEST: 'ข้อมูลที่กรอกไม่ถูกต้อง',
+  SERVER_ERROR: 'เซิร์ฟเวอร์ขัดข้อง ลองใหม่ภายหลัง',
+};
+
+let _dcDevices = [];
+
+function dcToken()    { return document.getElementById('dcAdminToken').value.trim(); }
+function dcEndpoint() { return document.getElementById('dcEndpoint').value.trim().replace(/\/+$/, ''); }
+function dcHcode()    { return document.getElementById('dcHcode').value.trim(); }
+
+function dcRequire() {
+  if (!dcToken()) { alert('กรุณากรอก Admin Token ของ DRUG-CAT'); return false; }
+  if (!/^[0-9]{5}$/.test(dcHcode())) { alert('กรุณากรอก HCODE 5 หลัก'); return false; }
+  return true;
+}
+
+async function dcCall(body) {
+  const res = await fetch(dcEndpoint(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-admin-token': dcToken() },
+    body: JSON.stringify(body),
+  });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(DC_ERR[j.error] || ('ผิดพลาด (HTTP ' + res.status + ')'));
+  if (j.ok !== true) throw new Error(DC_ERR[j.code] || j.code || 'คำสั่งไม่สำเร็จ');
+  return j;
+}
+
+function dcFmt(iso) {
+  if (!iso) return '-';
+  const d = new Date(iso);
+  return isNaN(d) ? '-' : d.toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', dateStyle: 'medium', timeStyle: 'short' });
+}
+
+function dcFeatLabels(ent) {
+  const map = { desktop: 'โปรแกรมหลัก', typhoon_ocr: 'อ่านฉลากยา AI' };
+  return Object.entries(ent || {}).filter(([, v]) => v === true)
+    .map(([k]) => map[k] || k).join(', ') || '-';
+}
+
+async function dcIssue() {
+  if (!dcRequire()) return;
+  const days = parseInt(document.getElementById('dcDays').value, 10) || 0;
+  const maxDevices = parseInt(document.getElementById('dcMaxDevices').value, 10) || 1;
+  const entitlements = {
+    desktop: document.getElementById('dcFeatDesktop').checked,
+    typhoon_ocr: document.getElementById('dcFeatTyphoon').checked,
+  };
+  if (!entitlements.desktop) { alert('ต้องเปิดสิทธิ์ "โปรแกรมหลัก (Desktop)" เสมอ'); return; }
+
+  const expires = new Date(Date.now() + days * 86400000).toISOString();
+  const btn = document.getElementById('btnDcIssue');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>กำลังออก License...';
+  document.getElementById('dcIssueResult').innerHTML = '';
+  try {
+    const j = await dcCall({
+      command: 'issue', hcode: dcHcode(),
+      expires_at: expires, max_devices: maxDevices, entitlements,
+    });
+    const lic = j.license || {};
+    document.getElementById('dcIssueResult').innerHTML = `
+      <div class="alert alert-success">
+        <b>✅ ออก License สำเร็จ</b><br><br>
+        📋 <b>License Key</b> (แสดง<b>ครั้งเดียว</b> — คัดลอกเก็บเดี๋ยวนี้):<br>
+        <span class="mono" style="font-size:1.05em;letter-spacing:.05em" id="dcKeyText">${escapeHtml(j.license_key)}</span>
+        <button class="btn btn-secondary btn-sm" style="margin-left:8px" onclick="navigator.clipboard.writeText(document.getElementById('dcKeyText').textContent)">Copy</button><br>
+        🏥 HCODE: ${escapeHtml(dcHcode())} &nbsp;|&nbsp; 📅 หมดอายุ: ${dcFmt(lic.expires_at)} &nbsp;|&nbsp; 💻 สูงสุด ${lic.max_devices ?? maxDevices} เครื่อง
+      </div>`;
+    dcLoadInfo();
+  } catch (e) {
+    document.getElementById('dcIssueResult').innerHTML = `<div class="alert alert-error">❌ ${escapeHtml(e.message)}</div>`;
+  } finally {
+    btn.disabled = false; btn.innerHTML = '✨ ออก License';
+  }
+}
+
+async function dcLoadInfo() {
+  if (!dcRequire()) return;
+  const el = document.getElementById('dcInfo');
+  el.innerHTML = '<div class="alert alert-info">⏳ กำลังดึงข้อมูล...</div>';
+  try {
+    const s = await dcCall({ command: 'show', hcode: dcHcode() });
+    const lic = s.license;
+    let html = `
+      <table><tbody>
+        <tr><th style="width:180px">รหัสอ้างอิง</th><td class="mono">${escapeHtml(lic.masked_key || '-')}</td></tr>
+        <tr><th>สถานะ</th><td><span style="color:${lic.status === 'active' ? '#166534' : '#991b1b'};font-weight:600">${lic.status === 'active' ? 'ใช้งานได้' : 'ถูกยกเลิก'}</span></td></tr>
+        <tr><th>เริ่มใช้งาน</th><td>${dcFmt(lic.starts_at)}</td></tr>
+        <tr><th>หมดอายุ</th><td>${dcFmt(lic.expires_at)}</td></tr>
+        <tr><th>เครื่องที่เปิดใช้</th><td>${lic.active_devices} / ${lic.max_devices} เครื่อง</td></tr>
+        <tr><th>สิทธิ์การใช้งาน</th><td>${escapeHtml(dcFeatLabels(lic.entitlements))}</td></tr>
+      </tbody></table>`;
+
+    const d = await dcCall({ command: 'devices', hcode: dcHcode() });
+    _dcDevices = d.devices || [];
+    if (_dcDevices.length === 0) {
+      html += '<div class="alert alert-info" style="margin-top:10px">ยังไม่มีเครื่องเปิดใช้งาน</div>';
+    } else {
+      html += '<table style="margin-top:10px"><thead><tr><th>ชื่อเครื่อง</th><th>ระบบ</th><th>เปิดใช้เมื่อ</th><th>ใช้งานล่าสุด</th><th>สถานะ</th><th></th></tr></thead><tbody>';
+      _dcDevices.forEach((dv, i) => {
+        const active = !dv.deactivated_at && !dv.revoked_at;
+        const st = dv.revoked_at ? 'ถูกระงับ' : dv.deactivated_at ? 'ปิดใช้งานแล้ว' : 'กำลังใช้งาน';
+        html += `<tr>
+          <td>${escapeHtml(dv.label || '-')}</td>
+          <td style="font-size:.75rem;color:#888">${escapeHtml(dv.platform || '-')}</td>
+          <td style="white-space:nowrap">${dcFmt(dv.activated_at)}</td>
+          <td style="white-space:nowrap">${dcFmt(dv.last_seen_at)}</td>
+          <td style="color:${active ? '#166534' : '#991b1b'}">${st}</td>
+          <td>${active ? `<button class="btn btn-danger btn-sm" onclick="dcRevokeDevice(${i})">ระงับเครื่องนี้</button>` : ''}</td>
+        </tr>`;
+      });
+      html += '</tbody></table>';
+    }
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = `<div class="alert alert-error">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function dcRevokeDevice(idx) {
+  if (!dcRequire()) return;
+  const dv = _dcDevices[idx];
+  if (!dv) return;
+  if (!confirm(`ระงับเครื่อง "${dv.label || 'นี้'}"?\n\nเครื่องจะเข้าโหมดอ่านอย่างเดียวทันทีที่ตรวจสิทธิ์รอบถัดไป\n(ผู้ใช้เครื่องนั้นสามารถเปิดใช้ใหม่ด้วย License Key เดิมได้)`)) return;
+  const el = document.getElementById('dcActionResult');
+  el.innerHTML = '<div class="alert alert-info">⏳ กำลังระงับเครื่อง...</div>';
+  try {
+    await dcCall({ command: 'revoke-device', hcode: dcHcode(), device_hash: dv.device_hash });
+    el.innerHTML = '<div class="alert alert-success">✅ ระงับเครื่องแล้ว</div>';
+    dcLoadInfo();
+  } catch (e) {
+    el.innerHTML = `<div class="alert alert-error">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function dcExtend() {
+  if (!dcRequire()) return;
+  const days = parseInt(document.getElementById('dcExtendDays').value, 10) || 0;
+  if (days < 1) { alert('กรุณาระบุจำนวนวัน (1-3650)'); return; }
+  const el = document.getElementById('dcActionResult');
+  el.innerHTML = '<div class="alert alert-info">⏳ กำลังต่ออายุ...</div>';
+  try {
+    const j = await dcCall({ command: 'extend', hcode: dcHcode(), days });
+    el.innerHTML = `<div class="alert alert-success">✅ ต่ออายุแล้ว — หมดอายุใหม่: ${dcFmt(j.expires_at)}</div>`;
+    dcLoadInfo();
+  } catch (e) {
+    el.innerHTML = `<div class="alert alert-error">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function dcRevoke() {
+  if (!dcRequire()) return;
+  if (!confirm(`ยกเลิก License ของ HCODE ${dcHcode()} ทั้งหน่วยบริการ?`)) return;
+  if (!confirm('การยกเลิกเป็นแบบถาวรและเลิกคืนไม่ได้ — ยืนยันอีกครั้งเพื่อดำเนินการ')) return;
+  const el = document.getElementById('dcActionResult');
+  el.innerHTML = '<div class="alert alert-info">⏳ กำลังยกเลิก...</div>';
+  try {
+    await dcCall({ command: 'revoke', hcode: dcHcode() });
+    el.innerHTML = '<div class="alert alert-success">✅ ยกเลิก License แล้ว</div>';
+    dcLoadInfo();
+  } catch (e) {
+    el.innerHTML = `<div class="alert alert-error">❌ ${escapeHtml(e.message)}</div>`;
   }
 }
 </script>
