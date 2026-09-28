@@ -204,9 +204,10 @@
 
 <!-- Desktop License card (DRUG-CAT / Labelinfo) -->
 <div class="card">
-  <h2 id="dcTitle">🐱 DRUG-CAT — จัดการ License (โปรแกรมสต๊อกยา รพ.สต.)</h2>
+  <h2>🖥️ จัดการ License โปรแกรม Desktop</h2>
+  <div class="hint">ออก / ต่ออายุ / ยกเลิก License ของ DRUG-CAT และ Labelinfo — เลือกโปรแกรมก่อน</div>
 
-  <div class="form-row">
+  <div class="form-row" style="margin-top:12px">
     <label>โปรแกรม:</label>
     <select id="dcProduct" onchange="dcApplyProduct()" style="max-width:280px">
       <option value="drugcat">DRUG-CAT (สต๊อกยา)</option>
@@ -757,13 +758,11 @@ const DC_ERR = {
 // admin token and the feature list differ, so one card drives both.
 const DC_PRODUCTS = {
   drugcat: {
-    title: '🐱 DRUG-CAT — จัดการ License (โปรแกรมสต๊อกยา รพ.สต.)',
     endpoint: 'https://fzlzmrwkueonabpwuhma.supabase.co/functions/v1/admin-license',
     features: ['desktop', 'typhoon_ocr'],
     maxDevices: 3,
   },
   labelinfo: {
-    title: '🏷️ Labelinfo — จัดการ License (พิมพ์สติกเกอร์ยา)',
     endpoint: 'https://fzlzmrwkueonabpwuhma.supabase.co/functions/v1/labelinfo-admin-license',
     features: ['desktop'],
     maxDevices: 1,
@@ -782,7 +781,6 @@ function dcProduct() {
 function dcApplyProduct() {
   const key = document.getElementById('dcProduct').value;
   const product = dcProduct();
-  document.getElementById('dcTitle').textContent = product.title;
   document.getElementById('dcEndpoint').value = product.endpoint;
   document.getElementById('dcTokenLabel').textContent =
     'Admin Token ของ ' + (key === 'labelinfo' ? 'Labelinfo' : 'DRUG-CAT') + ':';
