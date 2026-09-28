@@ -228,7 +228,7 @@
   <div class="form-row">
     <label>HCODE:</label>
     <input type="text" id="dcHcode" placeholder="05097" maxlength="5" style="max-width:120px" />
-    <span style="font-size:.8rem;color:#888">รหัสหน่วยบริการ 5 หลัก (ใช้ร่วมทุกคำสั่งด้านล่าง)</span>
+    <span style="font-size:.8rem;color:#888">รหัสหน่วยบริการ 5 หลัก — จำเป็นเฉพาะตอนออก License ใหม่</span>
   </div>
 
   <h2 style="margin-top:20px">➕ ออก License ใหม่</h2>
@@ -254,9 +254,10 @@
   </div>
   <div id="dcIssueResult"></div>
 
-  <h2 style="margin-top:20px">🔎 License ทั้งหมดของ HCODE</h2>
+  <h2 style="margin-top:20px">🔎 License ที่ออกไปแล้ว</h2>
   <div class="btn-row" style="margin-top:0">
-    <button class="btn btn-secondary" onclick="dcLoadInfo()">🔄 ดึงข้อมูล</button>
+    <button class="btn btn-secondary" id="btnDcLoadAll" onclick="dcLoadAll()">🌏 ดูทุก HCODE</button>
+    <button class="btn btn-secondary" onclick="dcLoadInfo()">🔎 เฉพาะ HCODE ที่กรอก</button>
   </div>
   <div id="dcInfo"></div>
   <div id="dcActionResult"></div>
@@ -761,11 +762,13 @@ const DC_PRODUCTS = {
     endpoint: 'https://fzlzmrwkueonabpwuhma.supabase.co/functions/v1/admin-license',
     features: ['desktop', 'typhoon_ocr'],
     maxDevices: 3,
+    listAll: false,  // backend has no list-all RPC yet
   },
   labelinfo: {
     endpoint: 'https://fzlzmrwkueonabpwuhma.supabase.co/functions/v1/labelinfo-admin-license',
     features: ['desktop'],
     maxDevices: 1,
+    listAll: true,
   },
 };
 
@@ -788,6 +791,9 @@ function dcApplyProduct() {
   document.getElementById('dcMaxDevices').value = product.maxDevices;
   document.getElementById('dcFeatTyphoonRow').style.display =
     product.features.includes('typhoon_ocr') ? '' : 'none';
+  const allButton = document.getElementById('btnDcLoadAll');
+  allButton.disabled = !product.listAll;
+  allButton.title = product.listAll ? '' : 'โปรแกรมนี้ยังต้องระบุ HCODE';
   for (const id of ['dcIssueResult', 'dcInfo', 'dcActionResult']) {
     document.getElementById(id).innerHTML = '';
   }
@@ -798,6 +804,11 @@ function dcApplyProduct() {
 function dcToken()    { return document.getElementById('dcAdminToken').value.trim(); }
 function dcEndpoint() { return document.getElementById('dcEndpoint').value.trim().replace(/\/+$/, ''); }
 function dcHcode()    { return document.getElementById('dcHcode').value.trim(); }
+
+function dcRequireToken() {
+  if (!dcToken()) { alert('กรุณากรอก ' + document.getElementById('dcTokenLabel').textContent.replace(':', '')); return false; }
+  return true;
+}
 
 function dcRequire() {
   if (!dcToken()) { alert('กรุณากรอก ' + document.getElementById('dcTokenLabel').textContent.replace(':', '')); return false; }
@@ -896,12 +907,55 @@ async function dcIssue() {
         <button class="btn btn-secondary btn-sm" style="margin-left:8px" onclick="dcCopyIssued('${lic.id}', this)">Copy</button><br>
         🏥 HCODE: ${escapeHtml(dcHcode())} &nbsp;|&nbsp; 📅 หมดอายุ: ${dcFmt(lic.expires_at)} &nbsp;|&nbsp; 💻 สูงสุด ${lic.max_devices ?? maxDevices} เครื่อง
       </div>`;
-    dcLoadInfo();
+    dcRefresh();
   } catch (e) {
     document.getElementById('dcIssueResult').innerHTML = `<div class="alert alert-error">❌ ${escapeHtml(e.message)}</div>`;
   } finally {
     btn.disabled = false; btn.innerHTML = '✨ ออก License';
   }
+}
+
+// Which listing is on screen, so refreshing after an action does not demand
+// an HCODE the all-HCODE view never asked for.
+let _dcLastView = 'one';
+
+function dcRefresh() {
+  if (_dcLastView === 'all') dcLoadAll(); else dcLoadInfo();
+}
+
+function dcRenderLicenses(el, licenses, showHcode) {
+  if (!licenses.length) {
+    el.innerHTML = '<div class="alert alert-info">ยังไม่มี License</div>';
+    return;
+  }
+  let html = '<table><thead><tr>' + (showHcode ? '<th>HCODE</th>' : '') +
+    '<th>Key</th><th>สถานะ</th><th>หมดอายุ</th><th>เครื่อง</th><th>สิทธิ์</th><th>จัดการ</th></tr></thead><tbody>';
+  for (const lic of licenses) {
+    const [statusText, statusColor] = dcLicenseStatus(lic);
+    const id = String(lic.id);
+    // Row actions carry the license's own HCODE, so they work in the
+    // all-HCODE listing where the HCODE box is empty or holds another unit.
+    const hc = String(lic.hcode || dcHcode());
+    const copyButton = _dcIssuedKeys[id]
+      ? `<button class="btn btn-secondary btn-sm" onclick="dcCopyIssued('${id}', this)">Copy Key</button>`
+      : '<span class="hint">Key เดิมไม่เก็บ plaintext</span>';
+    html += `<tr>
+      ${showHcode ? `<td class="mono">${escapeHtml(hc)}</td>` : ''}
+      <td class="mono">${escapeHtml(lic.masked_key || '-')}<br>${copyButton}</td>
+      <td style="color:${statusColor};font-weight:600">${statusText}</td>
+      <td style="white-space:nowrap">${dcFmt(lic.expires_at)}</td>
+      <td>${lic.active_devices} / ${lic.max_devices}</td>
+      <td>${escapeHtml(dcFeatLabels(lic.entitlements))}</td>
+      <td>
+        <button class="btn btn-secondary btn-sm" onclick="dcLoadDevices('${id}','${hc}')">เครื่อง</button>
+        <button class="btn btn-secondary btn-sm" onclick="dcExtend('${id}','${hc}')">ต่ออายุ</button>
+        ${lic.status === 'active' && !lic.expired ? `<button class="btn btn-danger btn-sm" onclick="dcRevoke('${id}','${hc}')">ยกเลิก</button>` : ''}
+        ${lic.expired ? `<button class="btn btn-danger btn-sm" onclick="dcDeleteExpired('${id}','${hc}')">ลบ</button>` : ''}
+      </td>
+    </tr>
+    <tr><td colspan="${showHcode ? 7 : 6}" id="dcDevices-${id}" style="display:none;background:#fafafa"></td></tr>`;
+  }
+  el.innerHTML = html + '</tbody></table>';
 }
 
 async function dcLoadInfo() {
@@ -910,48 +964,37 @@ async function dcLoadInfo() {
   el.innerHTML = '<div class="alert alert-info">⏳ กำลังดึงข้อมูล...</div>';
   try {
     const s = await dcCall({ command: 'list', hcode: dcHcode() });
-    const licenses = s.licenses || [];
-    if (!licenses.length) {
-      el.innerHTML = '<div class="alert alert-info">ยังไม่มี License สำหรับ HCODE นี้</div>';
-      return;
-    }
-    let html = '<table><thead><tr><th>Key</th><th>สถานะ</th><th>หมดอายุ</th><th>เครื่อง</th><th>สิทธิ์</th><th>จัดการ</th></tr></thead><tbody>';
-    for (const lic of licenses) {
-      const [statusText, statusColor] = dcLicenseStatus(lic);
-      const id = String(lic.id);
-      const copyButton = _dcIssuedKeys[id]
-        ? `<button class="btn btn-secondary btn-sm" onclick="dcCopyIssued('${id}', this)">Copy Key</button>`
-        : '<span class="hint">Key เดิมไม่เก็บ plaintext</span>';
-      html += `<tr>
-        <td class="mono">${escapeHtml(lic.masked_key || '-')}<br>${copyButton}</td>
-        <td style="color:${statusColor};font-weight:600">${statusText}</td>
-        <td style="white-space:nowrap">${dcFmt(lic.expires_at)}</td>
-        <td>${lic.active_devices} / ${lic.max_devices}</td>
-        <td>${escapeHtml(dcFeatLabels(lic.entitlements))}</td>
-        <td>
-          <button class="btn btn-secondary btn-sm" onclick="dcLoadDevices('${id}')">เครื่อง</button>
-          <button class="btn btn-secondary btn-sm" onclick="dcExtend('${id}')">ต่ออายุ</button>
-          ${lic.status === 'active' && !lic.expired ? `<button class="btn btn-danger btn-sm" onclick="dcRevoke('${id}')">ยกเลิก</button>` : ''}
-          ${lic.expired ? `<button class="btn btn-danger btn-sm" onclick="dcDeleteExpired('${id}')">ลบ</button>` : ''}
-        </td>
-      </tr>
-      <tr><td colspan="6" id="dcDevices-${id}" style="display:none;background:#fafafa"></td></tr>`;
-    }
-    html += '</tbody></table>';
-    el.innerHTML = html;
+    _dcLastView = 'one';
+    dcRenderLicenses(el, s.licenses || [], false);
   } catch (e) {
     el.innerHTML = `<div class="alert alert-error">❌ ${escapeHtml(e.message)}</div>`;
   }
 }
 
-async function dcLoadDevices(licenseId) {
-  if (!dcRequire()) return;
+// Every service unit at once — no HCODE needed, which is how you find a key
+// when you do not already know whose it is.
+async function dcLoadAll() {
+  if (!dcRequireToken()) return;
+  const el = document.getElementById('dcInfo');
+  el.innerHTML = '<div class="alert alert-info">⏳ กำลังดึงข้อมูลทุก HCODE...</div>';
+  try {
+    const s = await dcCall({ command: 'list-all', limit: 200 });
+    _dcLastView = 'all';
+    dcRenderLicenses(el, s.licenses || [], true);
+  } catch (e) {
+    el.innerHTML = `<div class="alert alert-error">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function dcLoadDevices(licenseId, hcode) {
+  if (!dcRequireToken()) return;
+  hcode = hcode || dcHcode();
   const el = document.getElementById('dcDevices-' + licenseId);
   if (!el) return;
   el.style.display = 'table-cell';
   el.innerHTML = '⏳ กำลังโหลดเครื่อง...';
   try {
-    const d = await dcCall({ command: 'devices', hcode: dcHcode(), license_id: licenseId });
+    const d = await dcCall({ command: 'devices', hcode, license_id: licenseId });
     _dcDevices[licenseId] = d.devices || [];
     if (!_dcDevices[licenseId].length) {
       el.innerHTML = 'ยังไม่มีเครื่องเปิดใช้งาน';
@@ -964,69 +1007,73 @@ async function dcLoadDevices(licenseId) {
         return `<tr><td>${escapeHtml(dv.label || '-')}</td><td>${escapeHtml(dv.platform || '-')}</td>
           <td>${dcFmt(dv.activated_at)}</td><td>${dcFmt(dv.last_seen_at)}</td>
           <td style="color:${active ? '#166534' : '#991b1b'}">${st}</td>
-          <td>${active ? `<button class="btn btn-danger btn-sm" onclick="dcRevokeDevice('${licenseId}', ${i})">ระงับ</button>` : ''}</td></tr>`;
+          <td>${active ? `<button class="btn btn-danger btn-sm" onclick="dcRevokeDevice('${licenseId}', ${i}, '${hcode}')">ระงับ</button>` : ''}</td></tr>`;
       }).join('') + '</tbody></table>';
   } catch (e) {
     el.innerHTML = `<div class="alert alert-error">❌ ${escapeHtml(e.message)}</div>`;
   }
 }
 
-async function dcRevokeDevice(licenseId, idx) {
-  if (!dcRequire()) return;
+async function dcRevokeDevice(licenseId, idx, hcode) {
+  if (!dcRequireToken()) return;
+  hcode = hcode || dcHcode();
   const dv = (_dcDevices[licenseId] || [])[idx];
   if (!dv) return;
   if (!confirm(`ระงับเครื่อง "${dv.label || 'นี้'}"?\n\nเครื่องจะเข้าโหมดอ่านอย่างเดียวทันทีที่ตรวจสิทธิ์รอบถัดไป\n(ผู้ใช้เครื่องนั้นสามารถเปิดใช้ใหม่ด้วย License Key เดิมได้)`)) return;
   const el = document.getElementById('dcActionResult');
   el.innerHTML = '<div class="alert alert-info">⏳ กำลังระงับเครื่อง...</div>';
   try {
-    await dcCall({ command: 'revoke-device', hcode: dcHcode(), license_id: licenseId, device_hash: dv.device_hash });
+    await dcCall({ command: 'revoke-device', hcode, license_id: licenseId, device_hash: dv.device_hash });
     el.innerHTML = '<div class="alert alert-success">✅ ระงับเครื่องแล้ว</div>';
-    dcLoadDevices(licenseId);
+    dcLoadDevices(licenseId, hcode);
   } catch (e) {
     el.innerHTML = `<div class="alert alert-error">❌ ${escapeHtml(e.message)}</div>`;
   }
 }
 
-async function dcExtend(licenseId) {
-  if (!dcRequire()) return;
+async function dcExtend(licenseId, hcode) {
+  if (!dcRequireToken()) return;
+  hcode = hcode || dcHcode();
   const days = parseInt(prompt('ต่ออายุกี่วัน?', '365') || '', 10) || 0;
   if (days < 1) { alert('กรุณาระบุจำนวนวัน (1-3650)'); return; }
   const el = document.getElementById('dcActionResult');
   el.innerHTML = '<div class="alert alert-info">⏳ กำลังต่ออายุ...</div>';
   try {
-    const j = await dcCall({ command: 'extend', hcode: dcHcode(), license_id: licenseId, days });
+    const j = await dcCall({ command: 'extend', hcode, license_id: licenseId, days });
     el.innerHTML = `<div class="alert alert-success">✅ ต่ออายุแล้ว — หมดอายุใหม่: ${dcFmt(j.expires_at)}</div>`;
-    dcLoadInfo();
+    dcRefresh();
   } catch (e) {
     el.innerHTML = `<div class="alert alert-error">❌ ${escapeHtml(e.message)}</div>`;
   }
 }
 
-async function dcRevoke(licenseId) {
-  if (!dcRequire()) return;
-  if (!confirm(`ยกเลิก License นี้ของ HCODE ${dcHcode()}?`)) return;
+async function dcRevoke(licenseId, hcode) {
+  if (!dcRequireToken()) return;
+  hcode = hcode || dcHcode();
+  if (!confirm(`ยกเลิก License นี้ของ HCODE ${hcode}?`)) return;
   if (!confirm('การยกเลิกเป็นแบบถาวรและเลิกคืนไม่ได้ — ยืนยันอีกครั้งเพื่อดำเนินการ')) return;
   const el = document.getElementById('dcActionResult');
   el.innerHTML = '<div class="alert alert-info">⏳ กำลังยกเลิก...</div>';
   try {
-    await dcCall({ command: 'revoke', hcode: dcHcode(), license_id: licenseId });
+    await dcCall({ command: 'revoke', hcode, license_id: licenseId });
     el.innerHTML = '<div class="alert alert-success">✅ ยกเลิก License แล้ว</div>';
-    dcLoadInfo();
+    dcRefresh();
   } catch (e) {
     el.innerHTML = `<div class="alert alert-error">❌ ${escapeHtml(e.message)}</div>`;
   }
 }
 
-async function dcDeleteExpired(licenseId) {
-  if (!dcRequire()) return;
+async function dcDeleteExpired(licenseId, hcode) {
+  if (!dcRequireToken()) return;
+  hcode = hcode || dcHcode();
   if (!confirm('ลบ License ที่หมดอายุนี้ออกจากรายการ?\n\nAudit log จะยังถูกเก็บไว้')) return;
   const el = document.getElementById('dcActionResult');
   el.innerHTML = '<div class="alert alert-info">⏳ กำลังลบ...</div>';
   try {
-    await dcCall({ command: 'delete-expired', hcode: dcHcode(), license_id: licenseId });
+    await dcCall({ command: 'delete-expired', hcode, license_id: licenseId });
     delete _dcIssuedKeys[licenseId];
     el.innerHTML = '<div class="alert alert-success">✅ ลบ License หมดอายุแล้ว</div>';
-    dcLoadInfo();
+    dcRefresh();
   } catch (e) {
     el.innerHTML = `<div class="alert alert-error">❌ ${escapeHtml(e.message)}</div>`;
   }
