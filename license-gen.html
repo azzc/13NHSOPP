@@ -202,16 +202,24 @@
   <div id="spDetail" style="margin-top:14px"></div>
 </div>
 
-<!-- DRUG-CAT License card -->
+<!-- Desktop License card (DRUG-CAT / Labelinfo) -->
 <div class="card">
-  <h2>🐱 DRUG-CAT — จัดการ License (โปรแกรมสต๊อกยา รพ.สต.)</h2>
+  <h2 id="dcTitle">🐱 DRUG-CAT — จัดการ License (โปรแกรมสต๊อกยา รพ.สต.)</h2>
 
+  <div class="form-row">
+    <label>โปรแกรม:</label>
+    <select id="dcProduct" onchange="dcApplyProduct()" style="max-width:280px">
+      <option value="drugcat">DRUG-CAT (สต๊อกยา)</option>
+      <option value="labelinfo">Labelinfo (พิมพ์สติกเกอร์ยา)</option>
+    </select>
+    <span style="font-size:.8rem;color:#888">คนละ Admin Token กัน</span>
+  </div>
   <div class="form-row">
     <label>Admin Endpoint:</label>
     <input type="text" id="dcEndpoint" value="https://fzlzmrwkueonabpwuhma.supabase.co/functions/v1/admin-license" />
   </div>
   <div class="form-row">
-    <label>Admin Token ของ DRUG-CAT:</label>
+    <label id="dcTokenLabel">Admin Token ของ DRUG-CAT:</label>
     <input type="password" id="dcAdminToken" placeholder="แยกคนละตัวกับ NhsoSender13" autocomplete="off" />
   </div>
   <div class="hint" style="margin-left:170px">Token ถือไว้ในหน้านี้ชั่วคราวเท่านั้น — ไม่ถูกบันทึกลงเครื่อง ปิดหน้าเว็บแล้วหายทันที</div>
@@ -236,7 +244,7 @@
     <label style="padding-top:4px">สิทธิ์การใช้งาน:</label>
     <div class="features-grid">
       <label class="feat-item"><input type="checkbox" id="dcFeatDesktop" checked> โปรแกรมหลัก (Desktop)</label>
-      <label class="feat-item"><input type="checkbox" id="dcFeatTyphoon" checked> อ่านฉลากยาด้วย AI (Typhoon OCR)</label>
+      <label class="feat-item" id="dcFeatTyphoonRow"><input type="checkbox" id="dcFeatTyphoon" checked> อ่านฉลากยาด้วย AI (Typhoon OCR)</label>
     </div>
   </div>
   <div class="btn-row" style="margin-top:4px">
@@ -745,15 +753,56 @@ const DC_ERR = {
   SERVER_ERROR: 'เซิร์ฟเวอร์ขัดข้อง ลองใหม่ภายหลัง',
 };
 
+// Both desktop products share one admin contract; only the endpoint, the
+// admin token and the feature list differ, so one card drives both.
+const DC_PRODUCTS = {
+  drugcat: {
+    title: '🐱 DRUG-CAT — จัดการ License (โปรแกรมสต๊อกยา รพ.สต.)',
+    endpoint: 'https://fzlzmrwkueonabpwuhma.supabase.co/functions/v1/admin-license',
+    features: ['desktop', 'typhoon_ocr'],
+    maxDevices: 3,
+  },
+  labelinfo: {
+    title: '🏷️ Labelinfo — จัดการ License (พิมพ์สติกเกอร์ยา)',
+    endpoint: 'https://fzlzmrwkueonabpwuhma.supabase.co/functions/v1/labelinfo-admin-license',
+    features: ['desktop'],
+    maxDevices: 1,
+  },
+};
+
 const _dcIssuedKeys = {};
 const _dcDevices = {};
+
+function dcProduct() {
+  return DC_PRODUCTS[document.getElementById('dcProduct').value] || DC_PRODUCTS.drugcat;
+}
+
+// Switching product must not carry the other product's token, endpoint or
+// results over: they belong to a different license database.
+function dcApplyProduct() {
+  const key = document.getElementById('dcProduct').value;
+  const product = dcProduct();
+  document.getElementById('dcTitle').textContent = product.title;
+  document.getElementById('dcEndpoint').value = product.endpoint;
+  document.getElementById('dcTokenLabel').textContent =
+    'Admin Token ของ ' + (key === 'labelinfo' ? 'Labelinfo' : 'DRUG-CAT') + ':';
+  document.getElementById('dcAdminToken').value = '';
+  document.getElementById('dcMaxDevices').value = product.maxDevices;
+  document.getElementById('dcFeatTyphoonRow').style.display =
+    product.features.includes('typhoon_ocr') ? '' : 'none';
+  for (const id of ['dcIssueResult', 'dcInfo', 'dcActionResult']) {
+    document.getElementById(id).innerHTML = '';
+  }
+  for (const id of Object.keys(_dcIssuedKeys)) delete _dcIssuedKeys[id];
+  for (const id of Object.keys(_dcDevices)) delete _dcDevices[id];
+}
 
 function dcToken()    { return document.getElementById('dcAdminToken').value.trim(); }
 function dcEndpoint() { return document.getElementById('dcEndpoint').value.trim().replace(/\/+$/, ''); }
 function dcHcode()    { return document.getElementById('dcHcode').value.trim(); }
 
 function dcRequire() {
-  if (!dcToken()) { alert('กรุณากรอก Admin Token ของ DRUG-CAT'); return false; }
+  if (!dcToken()) { alert('กรุณากรอก ' + document.getElementById('dcTokenLabel').textContent.replace(':', '')); return false; }
   if (!/^[0-9]{5}$/.test(dcHcode())) { alert('กรุณากรอก HCODE 5 หลัก'); return false; }
   return true;
 }
@@ -823,10 +872,11 @@ async function dcIssue() {
   if (!dcRequire()) return;
   const days = parseInt(document.getElementById('dcDays').value, 10) || 0;
   const maxDevices = parseInt(document.getElementById('dcMaxDevices').value, 10) || 1;
-  const entitlements = {
-    desktop: document.getElementById('dcFeatDesktop').checked,
-    typhoon_ocr: document.getElementById('dcFeatTyphoon').checked,
-  };
+  const features = dcProduct().features;
+  const entitlements = { desktop: document.getElementById('dcFeatDesktop').checked };
+  if (features.includes('typhoon_ocr')) {
+    entitlements.typhoon_ocr = document.getElementById('dcFeatTyphoon').checked;
+  }
   if (!entitlements.desktop) { alert('ต้องเปิดสิทธิ์ "โปรแกรมหลัก (Desktop)" เสมอ'); return; }
 
   const expires = new Date(Date.now() + days * 86400000).toISOString();
